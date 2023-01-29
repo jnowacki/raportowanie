@@ -5,6 +5,9 @@ library(DBI)
 library(odbc)
 library(tidyverse)
 
+# rename template.config.properties to config.properties and fill out login data
+# NEVER commit this file (it is present in .gitignore)
+
 config <- read.properties("config.properties")
 
 con <- dbConnect(odbc(),

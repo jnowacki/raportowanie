@@ -12,8 +12,8 @@ config <- read.properties("config.properties")
 
 con <- dbConnect(odbc(),
                  driver = "SQL Server",
-                 uid = config.user,
-                 pwd = config.pass,
+                 uid = config$user,
+                 pwd = config$pass,
                  server = 'mssql-2017.labs.wmi.amu.edu.pl',
                  database = 'iliagil')
 

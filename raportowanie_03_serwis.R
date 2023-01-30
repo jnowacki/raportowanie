@@ -1,3 +1,7 @@
+########################
+# Set up
+########################
+
 # install.packages("properties")
 library(properties)
 library(DBI)
@@ -20,7 +24,6 @@ con <- dbConnect(odbc(),
 dbListTables(con)
 
 
-
 # Create 'Service' data frame
 Service <- dbGetQuery(con,
                   'SELECT stype.service_type_name,      
@@ -40,7 +43,13 @@ Service <- dbGetQuery(con,
                   JOIN dim_service_type stype ON fs.service_type_id = stype.service_type_id       
                   JOIN dim_car car ON car.car_id = fs.car_id')
 
-Service <- as_tibble(Service)
+# Adjust service type name
+Service$service_type_name[Service$service_type_name == 'tire change'] <- 'Tire change'
+Service$service_type_name[Service$service_type_name == 'oil service'] <- 'Oil service'
+
+# Unify petrol type
+Service$fuel_type[Service$fuel_type == 'diesle'] <- 'Diesel'
+Service$fuel_type[Service$fuel_type == 'Petol'] <- 'Petrol'
 
 # Data frame summary
 head(Service)
@@ -53,7 +62,42 @@ for (i in 1:ncol(Service)){
   }
 }
 
-skimr::skim(Service)
+levels(Service$service_type_name)
+levels(Service$month_name)
+levels(Service$fuel_type)
+levels(Service$model)
+levels(Service$producer)
+
+
+# Create 'Income' data frame
+Income <- dbGetQuery(con,
+                      'SELECT fr.rental_amount,
+                      fr.payment_deadline,
+                      car.producer,
+                      car.model,
+                      car.production_year
+                      
+                      FROM fact_rental fr
+                      
+                      JOIN dim_calendar cal ON cal.DATE_id = fr.rental_DATE_id
+                      JOIN dim_car car ON car.car_id = fr.car_id')
+
+head(Income)
+
+Income <- Income %>% mutate(payment_year = as.integer(substr(payment_deadline,1,4)),
+                  payment_month = as.integer(substr(payment_deadline,6,7)),
+                  payment_year_month = as.integer(paste0(substr(payment_deadline,1,4),substr(payment_deadline,6,7)))) %>%
+  select(1,3:8)
+
+# Change character column types to factors
+for (i in 1:ncol(Income)){
+  if(sapply(Income[i], class) == 'character'){
+    Income[i] <- lapply(Income[i], function(x) as.factor(x))
+  }
+}
+
+levels(Income$model)
+levels(Income$producer)
 
 
 # Create palette
@@ -62,50 +106,57 @@ library(scales)
 wes_palettes
 mp <- c(wes_palette('Moonrise1'),
         wes_palette('Moonrise2'),
-        wes_palette('Moonrise3'),
         wes_palette('IsleofDogs1'))
 
 show_col(mp)
 
-my_pal = c('#798E87','#CCC591','#D5D5D3','#F3DF6C','#C27D38','#79402E','#29211F','#8D8680')
+#my_pal = c('#798E87','#CCC591','#D5D5D3','#F3DF6C','#C27D38','#79402E','#29211F','#8D8680')
+my_pal = c('#798BA0','#9FACBD','#798E87','#9BB0A5','#9F818C','#BCA5AE','#8D8680','#C3BBB5','#CCC591','#29211F')
+my_pal_2 = c('#E29E21','#DFE0DF','#402E32')
 show_col(my_pal)
+show_col(my_pal_2)
 
+
+
+########################
 # Service costs
+########################
 # 01 - current year vs previous year
-# 1st option
-g01_a <- Service %>% group_by(calendar_year) %>%
+## 1st option - total service
+df <- Service %>% group_by(calendar_year) %>%
+  summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
+  filter(calendar_year == 2021 | calendar_year == 2022) %>%
+  mutate(yoy_change = ((service_cost_k - lag(service_cost_k))/service_cost_k)*100) %>%
+  replace_na(list(yoy_change = 0)) %>%
+  mutate(across(c('calendar_year'),factor))
+
+(g01_a <- ggplot(df, aes(x = calendar_year,
+                         y = service_cost_k,
+                         # tooltip edition:
+                         text = paste(
+                           '<b>Service cost:</b>', service_cost_k,'k PLN',
+                           '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
+    geom_bar(stat = 'identity', fill = my_pal[1]) +
+    labs(x = 'Year', y = 'Service cost (k PLN)'))
+  
+ggplotly(g01_a, tooltip = c('text'))
+  
+
+## 2nd option - split for service type
+df <- Service %>% group_by(service_type_name, calendar_year) %>%
   filter(calendar_year == 2022 | calendar_year == 2021) %>%
   summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
   mutate(yoy_change = ((service_cost_k - lag(service_cost_k))/service_cost_k)*100) %>%
   replace_na(list(yoy_change = 0)) %>%
+  mutate(across(c('calendar_year'),factor))
 
-  ggplot(aes(x = fct_infreq(factor(calendar_year)),
-             y = service_cost_k,
-             # tooltip edition:
-             text = paste(
-               '<b>Service cost:</b>', service_cost_k,'k PLN',
-               '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
-  geom_bar(stat = 'identity', fill = my_pal[1]) +
-  labs(x = 'Year', y = 'Service cost (k PLN)')
-  
-ggplotly(g01_a, tooltip = c('text'))
-  
-# 2nd option
-# YOY calculation not working :-(
-g01_b <- Service %>% group_by(calendar_year, service_type_name) %>%
-  filter(calendar_year == 2022 | calendar_year == 2021) %>%
-  summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
-  arrange(service_type_name) %>%
-  mutate(yoy_change = (service_cost_k-lag(service_cost_k))/service_cost_k) %>%
-  replace_na(list(yoy_change = 0)) %>%
-
-  ggplot(aes(x = fct_infreq(factor(calendar_year)),
-             y = service_cost_k,
-             fill = service_type_name,
-             # tooltip edition:
-             text = paste(
-               '<b>Service cost:</b>', service_cost_k,'k PLN',
-               '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
+g01_b <- ggplot(df, aes(x = calendar_year,
+                        y = service_cost_k,
+                        fill = service_type_name,
+                        # tooltip edition:
+                        text = paste(
+                          '<b>Service cost:</b>', service_cost_k,'k PLN',
+                          '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
   geom_bar(stat = 'identity') +
   labs(x = 'Year', y = 'Service cost (k PLN)') +
   scale_fill_manual(name = 'Service type', values = c(my_pal))
@@ -114,33 +165,92 @@ ggplotly(g01_b, tooltip = c('text'))
 
 
 # 02 - general trend
-g02 <- Service %>% group_by(calendar_year) %>%
-    summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
-    mutate(yoy_change = ((service_cost_k - lag(service_cost_k))/service_cost_k)*100) %>%
-    replace_na(list(yoy_change = 0)) %>%
-    
-    ggplot(aes(x = fct_infreq(factor(calendar_year)),
-               y = service_cost_k,
-               # tooltip edition:
-               text = paste(
-                 '<b>Service cost:</b>', service_cost_k,'k PLN',
-                 '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
-    geom_bar(stat = 'identity', fill = my_pal[1]) +
-    labs(x = 'Year', y = 'Service cost (k PLN)')
+## 1st option - total service
+df <- Service %>% group_by(calendar_year) %>%
+  summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
+  mutate(yoy_change = ((service_cost_k - lag(service_cost_k))/service_cost_k)*100) %>%
+  replace_na(list(yoy_change = 0)) %>%
+  mutate(across(c('calendar_year'),factor))
+
+g02_a <- ggplot(df, aes(x = calendar_year,
+                        y = service_cost_k,
+                        # tooltip edition:
+                        text = paste(
+                          '<b>Service cost:</b>', service_cost_k,'k PLN',
+                          '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
+  geom_bar(stat = 'identity', fill = my_pal[1]) +
+  labs(x = 'Year', y = 'Service cost (k PLN)')
   
-ggplotly(g02, tooltip = c('text'))
-  
+ggplotly(g02_a, tooltip = c('text'))
+
+## 2nd option - split for service type
+df <- Service %>% group_by(service_type_name, calendar_year) %>%
+  summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
+  mutate(yoy_change = ((service_cost_k - lag(service_cost_k))/service_cost_k)*100) %>%
+  replace_na(list(yoy_change = 0)) %>%
+  mutate(across(c('calendar_year'),factor))
+
+g02_b <- ggplot(df, aes(x = calendar_year,
+                        y = service_cost_k,
+                        fill = service_type_name,
+                        # tooltip edition:
+                        text = paste(
+                          '<b>Service cost:</b>', service_cost_k,'k PLN',
+                          '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
+  geom_bar(stat = 'identity') +
+  labs(x = 'Year', y = 'Service cost (k PLN)') +
+  scale_fill_manual(name = 'Service type', values = c(my_pal))
+
+ggplotly(g02_b, tooltip = c('text'))
+
+
+# 03 - general trend with income comparison
+# Yearly_income
+yearly_income <- Income %>% group_by(payment_year) %>%
+  summarise(income_k = (sum(rental_amount))/1000)
+
+df <- Service %>% group_by(calendar_year) %>%
+  summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
+  left_join(yearly_income, by=c('calendar_year' = 'payment_year')) %>%
+  mutate(yoy_change = ((service_cost_k - lag(service_cost_k))/service_cost_k)*100,
+         cost_of_rev = (service_cost_k/income_k)*100) %>%
+  replace_na(list(yoy_change = 0))
+
+df <- as.data.frame(df)
+
+(g03 <- ggplot(df) + 
+    geom_bar(aes(x = calendar_year,
+                 y = service_cost_k,
+                 text = paste(
+                   '<b>Service cost:</b>', service_cost_k,'k PLN',
+                   '\n<b>YOY change:</b>', round(yoy_change,2), '%',
+                   '\n----------------------------',
+                   '\n<b>Part of income:</b>', round(cost_of_rev,2),' %')),
+             stat = 'identity',
+             fill = my_pal[1]) +
+    geom_line(aes(x = calendar_year,
+                  y = 100*cost_of_rev,
+                  color = '% of income'),
+              stat = 'identity',
+              size = 2) +
+    labs(x = 'Year', y = 'Service cost (k PLN)') +
+    scale_color_manual(name = '', values = my_pal_2[1])+
+    scale_y_continuous(sec.axis = sec_axis(~.*0.01, name = '% of income')))
+
+
+ggplotly(g03, tooltip = c('text'))
+
+
 # no tooltip, just labels
 Service %>% group_by(calendar_year, service_type_name) %>%
-  summarise(service_cost = sum(service_cost),
-            service_cost_k = round(sum(service_cost)/1000,1)) %>%
+  summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
   ggplot(aes(x = fct_infreq(factor(calendar_year)),
-             y = service_cost,
+             y = service_cost_k,
              fill = service_type_name,
              label = service_cost_k)) +
   geom_bar(stat = 'identity') +
-  geom_text(position = position_stack(vjust = 0.9)) +
-  labs(x = 'Year', y = 'Service cost') +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal[7]) +
+  labs(x = 'Year', y = 'Service cost (k PLN)') +
   scale_fill_manual(name = 'Service type', values = my_pal)
 
 

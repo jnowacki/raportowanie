@@ -67,7 +67,8 @@ for (i in c(1:3)){
 # Create 'Service' data frame
 Service <- dbGetQuery(con,
                   'SELECT stype.service_type_name,      
-                  fs.service_cost,      
+                  fs.service_cost,
+                  fs.car_id,
                   cal.calendar_month,     
                   cal.calendar_year,      
                   cal.calendar_year_month,      
@@ -322,10 +323,10 @@ g05 <- ggplot(df05, aes(x = as.character(calendar_year_month),
                       limits = c(levels(Service$producer))) +
     scale_x_discrete(labels = c(d)) +
     
-    geom_text(position = position_stack(vjust = 0.85), color = my_pal_2[2], size=3) +
-    geom_text(position = position_stack(vjust = 0.85), color = my_pal_2[2], size=3.01) +
-    geom_text(position = position_stack(vjust = 0.85), color = my_pal_2[2], size=3.02) +
-    geom_text(position = position_stack(vjust = 0.85), color = my_pal_2[2], size=3.03) +
+    geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3) +
+    geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.01) +
+    geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.02) +
+    geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.03) +
     
     labs(x = '', y = 'Number of serivce activities')
 
@@ -335,8 +336,53 @@ p %>% style(p, showlegend = FALSE, traces = 3)
 
 ```
 
-
 ### Car maintenance
 
 1.  *ile kosztuje nas serwis poszczególnych marek samochodów*
+
+    ```{r}
+    #Total costs per model and producer
+
+    df06 <- Service %>% group_by(producer, model) %>%
+      summarise(service_cost_model_k = round(sum(service_cost/1000),1)) %>%
+      group_by(producer) %>%
+      mutate(service_cost_producer_k = sum(service_cost_model_k))
+
+    df06
+
+    g06 <- ggplot(df06, aes(x = reorder(producer, service_cost_producer_k),
+                             y = service_cost_model_k,
+                             fill = model,
+                             label = paste(service_cost_model_k, model, sep="\n"))) +
+        geom_bar(stat = "identity") +
+        geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[3]) +
+        labs(x = '', y = 'Total cost of service (k PLN)') +
+        theme(legend.position = "none")
+
+    g06
+
+    #Mean costs per car
+
+    df07 <- Service %>% group_by(car_id, producer, model) %>%
+      summarise(service_cost_car = round(sum(service_cost),2)) %>%
+      group_by(producer, model) %>%
+      summarise(average_cost_per_car = round(mean(service_cost_car),2))
+      
+    df07
+
+    g07 <- ggplot(df07, aes(x = reorder(model, average_cost_per_car),
+                             y = average_cost_per_car,
+                             fill = producer,
+                             text = paste(
+                               '<b>Producer:</b>', producer, '\n', '<b>Model:</b>', model, '\n',
+                               '<b>Mean service cost:</b>', average_cost_per_car, ' PLN'))) +
+        geom_bar(stat = "identity") +
+        scale_fill_manual(name = 'Producer', values = my_pal,
+                          limits = c(levels(Service$producer))) +
+        labs(x = '', y = 'Mean lifetime cost of service (PLN)') + 
+       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+    ggplotly(g07, tooltip = c('text'))
+    ```
+
 2.  *ranking samochodów wg kosztów serwisów*

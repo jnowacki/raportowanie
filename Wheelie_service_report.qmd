@@ -304,7 +304,7 @@ p %>% style(p, showlegend = FALSE, traces = 9)
 
 ### Car maintenance costs
 
-#### Service costs  *ile kosztuje nas serwis poszczególnych marek samochodów*
+#### Service costs *ile kosztuje nas serwis poszczególnych marek samochodów*
 
 ```{r}
 #Total costs per model and producer
@@ -327,11 +327,37 @@ g06
     
 ```
 
+```{r}
+ 
+#Mean yearly service costs per car
 
+df07 <- Service %>% group_by(calendar_year, car_id, producer, model) %>%
+      summarise(service_cost_car = sum(service_cost)) %>%
+      group_by(calendar_year, producer, model) %>%
+      summarise(average_cost_per_car = mean(service_cost_car)) %>%
+      group_by(producer, model) %>%
+      summarise(average_cost_per_car_per_year = round(mean(average_cost_per_car),2))
+    
+     g07 <- ggplot(df07, aes(x = reorder(model, average_cost_per_car_per_year),
+                             y = average_cost_per_car_per_year,
+                             fill = producer,
+                             text = paste(
+                               '<b>Producer:</b>', producer, '\n', '<b>Model:</b>', model, '\n',
+                               '<b>Mean yearly service cost:</b>', average_cost_per_car, ' PLN'))) +
+        geom_bar(stat = "identity") +
+        scale_fill_manual(name = 'Producer', values = my_pal,
+                          limits = c(levels(Service$producer))) +
+        labs(x = '', y = 'Mean yearly cost of service (PLN)') + 
+       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+    ggplotly(g07, tooltip = c('text'))
+```
 
 ```{r}
-    #Mean costs per car
+    #Mean lifetime service costs per car
 
+   
+    
     df07 <- Service %>% group_by(car_id, producer, model) %>%
       summarise(service_cost_car = round(sum(service_cost),2)) %>%
       group_by(producer, model) %>%

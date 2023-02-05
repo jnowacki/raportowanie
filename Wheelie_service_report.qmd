@@ -37,7 +37,6 @@ con <- dbConnect(odbc(),
                  server = 'mssql-2017.labs.wmi.amu.edu.pl',
                  database = 'iliagil')
 
-
 # Create 'Calendar' data frame
 Calendar <- dbGetQuery(con,
                        'SELECT	calendar_year,
@@ -97,9 +96,8 @@ Service[6:10] <- as.data.frame(
   apply(Service[6:10], 2, function(x) gsub("\\s+", "", x)))
 
 # Change column types
-for (i in c(1,7:9)){
-  Service[i] <- lapply(Service[i], function(x) as.factor(x))
-}
+Service$calendar_year_month <- as.integer(Service$calendar_year_month)
+
 
 
 # Create 'Income' data frame
@@ -115,18 +113,14 @@ Income <- dbGetQuery(con,
                       JOIN dim_calendar cal ON cal.DATE_id = fr.rental_DATE_id
                       JOIN dim_car car ON car.car_id = fr.car_id')
 
-Income <- Income %>% mutate(production_year = as.integer(production_year),
-                  payment_year = as.integer(substr(payment_deadline,1,4)),
+Income <- Income %>% mutate(payment_year = as.integer(substr(payment_deadline,1,4)),
                   payment_month = as.integer(substr(payment_deadline,6,7)),
                   payment_year_month = as.integer(paste0(substr(payment_deadline,1,4),substr(payment_deadline,6,7)))) %>%
   select(1,3:8)
 
-# Change character column types to factors
-for (i in 1:ncol(Income)){
-  if(sapply(Income[i], class) == 'character'){
-    Income[i] <- lapply(Income[i], function(x) as.factor(x))
-  }
-}
+# Remove spaces from data frame
+Income[2:3] <- as.data.frame(
+  apply(Income[2:3], 2, function(x) gsub("\\s+", "", x)))
 
 
 # Custom palette
@@ -177,37 +171,9 @@ g01_b <- ggplot(df01_b, aes(x = calendar_year,
 ggplotly(g01_b, tooltip = c('text'))
 ```
 
-#### General trend
+#### General trend vs income
 
 Change of service costs YOY:
-
-```{r}
-df02_b <- Service %>% group_by(service_type_name, calendar_year) %>%
-  summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
-  mutate(yoy_change = ((service_cost_k - lag(service_cost_k))/service_cost_k)*100) %>%
-  replace_na(list(yoy_change = 0)) %>%
-  mutate(across(c('calendar_year'),factor))
-
-g02_b <- ggplot(df02_b, aes(x = calendar_year,
-                        y = service_cost_k,
-                        fill = service_type_name,
-                        label = service_cost_k,
-                        # tooltip edition:
-                        text = paste('<b>YOY change:</b>', round(yoy_change,2), '%'))) +
-  geom_bar(stat = 'identity') +
-  labs(x = 'Year', y = 'Service cost (k PLN)') +
-  scale_fill_manual(name = 'Service type', values = c(my_pal)) +
-  
-  # "bold" labels
-  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=3.5) +
-  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=3.51) +
-  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=3.52) +
-  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=3.53)
-
-ggplotly(g02_b, tooltip = c('text'))
-```
-
-#### Service costs vs income
 
 ```{r}
 yearly_income <- Income %>% group_by(payment_year) %>%
@@ -252,7 +218,6 @@ g03 <- ggplot(df03, aes(label = service_cost_k)) +
 ggplotly(g03, tooltip = c('text'))
 ```
 
-
 ### Service activities
 
 #### Service type
@@ -265,8 +230,9 @@ df04 <- Service %>% group_by(calendar_year_month, service_type_name) %>%
              service_cnt = n()) %>%
    right_join(Calendar, by='calendar_year_month') %>%
    replace_na(list(service_cnt = 0)) %>%
-   arrange(calendar_year_month) %>%
-   filter(calendar_year == 2021 | calendar_year == 2022)
+   arrange(calendar_year_month) 
+#%>%
+#   filter(calendar_year == 2021 | calendar_year == 2022)
 
 # Vector with data labels (for labels not to overlap in ggplotly)
 d <- c(distinct(df04, short_date)$short_date)
@@ -297,7 +263,7 @@ p %>% style(p, showlegend = FALSE, traces = 3)
 
 #### Car model
 
-Number of service activities in years 2016-2022 - split by **car model**.
+Number of service activities in years 2021-2022 - split by **car model**.
 
 ```{r}
 df05 <- Service %>% group_by(calendar_year_month, producer) %>%
@@ -332,43 +298,44 @@ g05 <- ggplot(df05, aes(x = as.character(calendar_year_month),
 
 # Remove "NA" from legend in ggplotly
 p <- ggplotly(g05, tooltip = c('text'))
-p %>% style(p, showlegend = FALSE, traces = 3)
+p %>% style(p, showlegend = FALSE, traces = 9)
 
 ```
 
-### Car maintenance
+### Car maintenance costs
 
-1.  *ile kosztuje nas serwis poszczególnych marek samochodów*
+#### Service costs  *ile kosztuje nas serwis poszczególnych marek samochodów*
 
-    ```{r}
-    #Total costs per model and producer
+```{r}
+#Total costs per model and producer
 
-    df06 <- Service %>% group_by(producer, model) %>%
-      summarise(service_cost_model_k = round(sum(service_cost/1000),1)) %>%
-      group_by(producer) %>%
-      mutate(service_cost_producer_k = sum(service_cost_model_k))
+df06 <- Service %>% group_by(producer, model) %>%
+  summarise(service_cost_model_k = round(sum(service_cost/1000),1)) %>%
+  group_by(producer) %>%
+  mutate(service_cost_producer_k = sum(service_cost_model_k))
 
-    df06
+g06 <- ggplot(df06, aes(x = reorder(producer, service_cost_producer_k),
+                        y = service_cost_model_k,
+                        fill = model,
+                        label = paste(service_cost_model_k, model, sep="\n"))) +
+  geom_bar(stat = "identity") +
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[3]) +
+  labs(x = '', y = 'Total cost of service (k PLN)') +
+  theme(legend.position = "none")
 
-    g06 <- ggplot(df06, aes(x = reorder(producer, service_cost_producer_k),
-                             y = service_cost_model_k,
-                             fill = model,
-                             label = paste(service_cost_model_k, model, sep="\n"))) +
-        geom_bar(stat = "identity") +
-        geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[3]) +
-        labs(x = '', y = 'Total cost of service (k PLN)') +
-        theme(legend.position = "none")
+g06
+    
+```
 
-    g06
 
+
+```{r}
     #Mean costs per car
 
     df07 <- Service %>% group_by(car_id, producer, model) %>%
       summarise(service_cost_car = round(sum(service_cost),2)) %>%
       group_by(producer, model) %>%
       summarise(average_cost_per_car = round(mean(service_cost_car),2))
-      
-    df07
 
     g07 <- ggplot(df07, aes(x = reorder(model, average_cost_per_car),
                              y = average_cost_per_car,
@@ -383,6 +350,6 @@ p %>% style(p, showlegend = FALSE, traces = 3)
        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
     ggplotly(g07, tooltip = c('text'))
-    ```
+```
 
 2.  *ranking samochodów wg kosztów serwisów*

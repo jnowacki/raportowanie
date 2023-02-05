@@ -21,8 +21,6 @@ con <- dbConnect(odbc(),
                  server = 'mssql-2017.labs.wmi.amu.edu.pl',
                  database = 'iliagil')
 
-dbListTables(con)
-
 # Create 'Calendar' data frame
 Calendar <- dbGetQuery(con,
                        'SELECT	calendar_year,
@@ -37,23 +35,17 @@ Calendar <- dbGetQuery(con,
                        calendar_year_month,
                        MonthName')
 
+Calendar$short_date <- paste0(substr(Calendar$month_name,1,3),"'",substr(Calendar$calendar_year,3,4))
+
 # Remove spaces from months names
 Calendar <- as.data.frame(
   apply(Calendar,2, function(x) gsub("\\s+", "", x)))
 
-# Change column types to factors
-Calendar[1] <- lapply(Calendar[1], function(x) as.factor(x))
-Calendar[2] <- lapply(Calendar[2], function(x) as.factor(x))
-Calendar[3] <- lapply(Calendar[3], function(x) as.integer(x))
-Calendar[4] <- lapply(Calendar[4], function(x) as.factor(x))
+# Change column types
+for (i in c(1:3)){
+  Calendar[i] <- lapply(Calendar[i], function(x) as.integer(x))
+}
 
-levels(Calendar$calendar_year)
-levels(Calendar$calendar_month)
-levels(Calendar$month_name)
-levels(Calendar$calendar_year_month)
-
-head(Calendar)
-as.tibble(Calendar)
 
 # Create 'Service' data frame
 Service <- dbGetQuery(con,
@@ -86,10 +78,6 @@ Service$fuel_type[Service$fuel_type == 'Petol'] <- 'Petrol'
 Service[6:10] <- as.data.frame(
   apply(Service[6:10], 2, function(x) gsub("\\s+", "", x)))
 
-# Data frame summary
-head(Service)
-as.tibble(Service)
-skimr::skim(Service)
 
 # Change character column types to factors
 for (i in 1:ncol(Service)){
@@ -99,7 +87,6 @@ for (i in 1:ncol(Service)){
 }
 
 levels(Service$service_type_name)
-levels(Service$month_name)
 levels(Service$fuel_type)
 levels(Service$model)
 levels(Service$producer)
@@ -118,9 +105,6 @@ Income <- dbGetQuery(con,
                       JOIN dim_calendar cal ON cal.DATE_id = fr.rental_DATE_id
                       JOIN dim_car car ON car.car_id = fr.car_id')
 
-head(Income)
-as.tibble(Income)
-
 Income <- Income %>% mutate(payment_year = as.integer(substr(payment_deadline,1,4)),
                   payment_month = as.integer(substr(payment_deadline,6,7)),
                   payment_year_month = as.integer(paste0(substr(payment_deadline,1,4),substr(payment_deadline,6,7)))) %>%
@@ -135,6 +119,13 @@ for (i in 1:ncol(Income)){
 
 levels(Income$model)
 levels(Income$producer)
+
+
+# Data frames summary
+as.tibble(Service)
+as.tibble(Income)
+as.tibble(Calendar)
+
 
 
 # Create palette
@@ -167,7 +158,7 @@ df01_a <- Service %>% group_by(calendar_year) %>%
   replace_na(list(yoy_change = 0)) %>%
   mutate(across(c('calendar_year'),factor))
 
-(g01_a <- ggplot(df01, aes(x = calendar_year,
+(g01_a <- ggplot(df01_a, aes(x = calendar_year,
                          y = service_cost_k,
                          # tooltip edition:
                          text = paste(
@@ -188,15 +179,20 @@ df01_b <- Service %>% group_by(service_type_name, calendar_year) %>%
   mutate(across(c('calendar_year'),factor))
 
 g01_b <- ggplot(df01_b, aes(x = calendar_year,
-                        y = service_cost_k,
-                        fill = service_type_name,
-                        # tooltip edition:
-                        text = paste(
-                          '<b>Service cost:</b>', service_cost_k,'k PLN',
-                          '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
+                            y = service_cost_k,
+                            fill = service_type_name,
+                            label = service_cost_k,
+                            # tooltip edition:
+                            text = paste('<b>YOY change:</b>', round(yoy_change,2), '%'))) +
   geom_bar(stat = 'identity') +
   labs(x = 'Year', y = 'Service cost (k PLN)') +
-  scale_fill_manual(name = 'Service type', values = c(my_pal))
+  scale_fill_manual(name = 'Service type', values = c(my_pal)) +
+  
+  # "bold" labels 
+  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=4) +
+  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=4.01) +
+  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=4.02) +
+  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=4.03)
 
 ggplotly(g01_b, tooltip = c('text'))
 
@@ -302,7 +298,7 @@ Service %>% group_by(calendar_year, service_type_name) %>%
          calendar_year_month = as.character(calendar_year_month)) %>%
   filter(calendar_year == 2021 | calendar_year == 2022))
 
-# Vector with data labels (for labels not to overlap in ggplotly some values must be empty)
+# Vector with data labels (for labels not to overlap, some values must be empty)
 d <- c(df04$date)
 odd <- seq(2,26,2)
 d <- replace(d,odd,'')

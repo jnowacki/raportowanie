@@ -139,20 +139,26 @@ as.tibble(Calendar)
 
 # Create palette
 library(scales)
-
+library(wesanderson)
 wes_palettes
-mp <- c(wes_palette('Moonrise1'),
-        wes_palette('Moonrise2'),
+mp <- c(wes_palette('Moonrise2'),
+        wes_palette('Moonrise1'),
         wes_palette('IsleofDogs1'))
 
-show_col(mp)
-
 #my_pal = c('#798E87','#CCC591','#D5D5D3','#F3DF6C','#C27D38','#79402E','#29211F','#8D8680')
-my_pal = c('#798BA0','#9FACBD','#798E87','#9BB0A5','#9F818C','#BCA5AE','#8D8680','#C3BBB5','#CCC591','#29211F')
-my_pal_2 = c('#CC8C00','#F0F0F0','#402E32')
+my_pal = c("#798E87",'#9BB0A5',"#C27D38",'#b39f57',"#CCC591",'#798BA0','#9FACBD','#635e68','#a9a5b0', "#78726d","#9e9995",'#c7c7c1')
+my_pal_2 = c('#cf9d47','#e8e8e8','#454141')
 show_col(my_pal)
 show_col(my_pal_2)
 
+
+palettes <- ggthemes_data[["tableau"]][["color-palettes"]][["regular"]]
+for (palname in names(palettes)) {
+  pal <- tableau_color_pal(palname)
+  max_n <- attr(pal, "max_n")
+  show_col(pal(max_n))
+  title(main = palname)
+}
 
 
 ########################
@@ -316,7 +322,8 @@ Service %>% group_by(calendar_year, service_type_name) %>%
 # 01 - Service type
 df04 <- Service %>% group_by(calendar_year_month, service_type_name) %>%
   summarise(service_cost_k = round(sum(service_cost/1000),1),
-            service_cnt = n()) %>%
+            service_cnt = n(),
+            avg_cost = round((service_cost_k*1000)/service_cnt,1)) %>%
   right_join(Calendar, by='calendar_year_month') %>%
   replace_na(list(service_cnt = 0)) %>%
   arrange(calendar_year_month) %>%
@@ -326,7 +333,7 @@ df04 <- Service %>% group_by(calendar_year_month, service_type_name) %>%
 d <- c(distinct(df04, short_date)$short_date)
 d <- replace(d,seq(2,26,2),'')
 
-g04 <- ggplot(df04, aes(x = as.character(calendar_year_month),
+(g04 <- ggplot(df04, aes(x = as.character(calendar_year_month),
                         y = service_cnt,
                         fill = service_type_name,
                         label = service_cnt,
@@ -341,7 +348,7 @@ g04 <- ggplot(df04, aes(x = as.character(calendar_year_month),
   geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.02) +
   geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.03) +
   
-  labs(x = '', y = 'Number of serivce activities')
+  labs(x = '', y = 'Number of serivce activities'))
 
 # Remove "NA" from legend in ggplotly
 p <- ggplotly(g04, tooltip = c('text'))
@@ -354,7 +361,8 @@ p %>% style(p, showlegend = FALSE, traces = 3)
 
 df05 <- Service %>% group_by(calendar_year_month, producer) %>%
   summarise(service_cost_k = round(sum(service_cost/1000),1),
-            service_cnt = n()) %>%
+            service_cnt = n(),
+            avg_cost = round((service_cost_k*1000)/service_cnt,1)) %>%
   right_join(Calendar, by='calendar_year_month') %>%
   replace_na(list(service_cnt = 0)) %>%
   arrange(calendar_year_month) %>%
@@ -404,7 +412,7 @@ d <- replace(d,seq(2,26,2),'')
 
 (g05 <- ggplot(df05, aes(x = as.character(calendar_year_month),
                          y = service_cnt,
-                         fill = producer,
+                         fill = reorder(producer, service_cnt),
                          label = service_cnt,
                          text = paste(
                            '<b>Service cost:</b>', service_cost_k,'k PLN'))) +
@@ -425,9 +433,52 @@ p <- ggplotly(g05, tooltip = c('text'))
 p %>% style(p, showlegend = FALSE, traces = 9)
 
 
+########################
+# Car maintenance costs
+########################
+
 as.tibble(Service)
-df07 <- Service %>% group_by(calendar_year, car_id, producer, model) %>%
-  summarise(service_cost_car = round(sum(service_cost),2)) %>%
-  group_by(calendar_year, producer, model) %>%
-  summarise(average_cost_per_car = round(mean(service_cost_car),2)) %>%
-  filter(calendar_year == 2022)
+
+(df06 <- Service %>% group_by(calendar_year, producer, model) %>%
+    summarise(service_cost_model_k = round(sum(service_cost/1000),1),
+              cnt_model = n()) %>%
+    group_by(producer, calendar_year) %>%
+    mutate(service_cost_producer_k = sum(service_cost_model_k),
+           cnt_producer = sum(cnt_model)))
+
+
+
+(g06 <- ggplot((df06 %>% filter(calendar_year==2022)),
+               aes(x = reorder(producer, service_cost_producer_k),
+                   y = service_cost_model_k,
+                   fill = reorder(model, service_cost_producer_k),
+                   label = paste(service_cost_model_k, model, sep="\n"),
+                   text = paste('<b>Number of service act: </b>',cnt_model))) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(name = 'Car model', values = c(my_pal)) +
+  
+  geom_text(position = position_stack(vjust = 0.8), color = my_pal_2[2], size=3.5) +
+  geom_text(position = position_stack(vjust = 0.8), color = my_pal_2[2], size=3.51) +
+  geom_text(position = position_stack(vjust = 0.8), color = my_pal_2[2], size=3.52) +
+  geom_text(position = position_stack(vjust = 0.8), color = my_pal_2[2], size=3.53) +
+  
+  labs(x = '', y = 'Service costs (k PLN)') +
+  theme(legend.position = "none"))
+
+ggplotly(g06, tooltip = c('text'))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

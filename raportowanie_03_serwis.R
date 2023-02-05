@@ -46,11 +46,13 @@ for (i in c(1:3)){
   Calendar[i] <- lapply(Calendar[i], function(x) as.integer(x))
 }
 
+as.tibble(Calendar)
 
 # Create 'Service' data frame
 Service <- dbGetQuery(con,
-                  'SELECT stype.service_type_name,      
-                  fs.service_cost,      
+                      'SELECT stype.service_type_name,      
+                  fs.service_cost,
+                  fs.car_id,
                   cal.calendar_month,     
                   cal.calendar_year,      
                   cal.calendar_year_month,      
@@ -78,13 +80,16 @@ Service$fuel_type[Service$fuel_type == 'Petol'] <- 'Petrol'
 Service[6:10] <- as.data.frame(
   apply(Service[6:10], 2, function(x) gsub("\\s+", "", x)))
 
-
-# Change character column types to factors
+# Change column types
 for (i in 1:ncol(Service)){
   if(sapply(Service[i], class) == 'character'){
     Service[i] <- lapply(Service[i], function(x) as.factor(x))
   }
 }
+
+Service$calendar_year_month <- as.integer(Service$calendar_year_month)
+
+as.tibble(Service)
 
 levels(Service$service_type_name)
 levels(Service$fuel_type)
@@ -109,6 +114,10 @@ Income <- Income %>% mutate(payment_year = as.integer(substr(payment_deadline,1,
                   payment_month = as.integer(substr(payment_deadline,6,7)),
                   payment_year_month = as.integer(paste0(substr(payment_deadline,1,4),substr(payment_deadline,6,7)))) %>%
   select(1,3:8)
+
+# Remove spaces from data frame
+Income[2:3] <- as.data.frame(
+  apply(Income[2:3], 2, function(x) gsub("\\s+", "", x)))
 
 # Change character column types to factors
 for (i in 1:ncol(Income)){
@@ -223,18 +232,24 @@ df02_b <- Service %>% group_by(service_type_name, calendar_year) %>%
   replace_na(list(yoy_change = 0)) %>%
   mutate(across(c('calendar_year'),factor))
 
-(g02_b <- ggplot(df02_b, aes(x = calendar_year,
-                        y = service_cost_k,
-                        fill = service_type_name,
-                        # tooltip edition:
-                        text = paste(
-                          '<b>Service cost:</b>', service_cost_k,'k PLN',
-                          '\n<b>YOY change:</b>', round(yoy_change,2), '%'))) +
+g02_b <- ggplot(df02_b, aes(x = calendar_year,
+                            y = service_cost_k,
+                            fill = service_type_name,
+                            label = service_cost_k,
+                            # tooltip edition:
+                            text = paste('<b>YOY change:</b>', round(yoy_change,2), '%'))) +
   geom_bar(stat = 'identity') +
   labs(x = 'Year', y = 'Service cost (k PLN)') +
-  scale_fill_manual(name = 'Service type', values = c(my_pal)))
+  scale_fill_manual(name = 'Service type', values = c(my_pal)) +
+  
+  # "bold" labels
+  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=3.5) +
+  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=3.51) +
+  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=3.52) +
+  geom_text(position = position_stack(vjust = 0.9), color = my_pal_2[2], size=3.53)
 
 ggplotly(g02_b, tooltip = c('text'))
+
 
 
 # 03 - general trend with income comparison
@@ -249,24 +264,33 @@ df03 <- Service %>% group_by(calendar_year) %>%
          cost_of_rev = (service_cost_k/income_k)*100) %>%
   replace_na(list(yoy_change = 0))
 
-(g03 <- ggplot(df03) + 
-    geom_bar(aes(x = calendar_year,
-                 y = service_cost_k,
-                 text = paste(
-                   '<b>Service cost:</b>', service_cost_k,'k PLN',
-                   '\n<b>YOY change:</b>', round(yoy_change,2), '%',
-                   '\n----------------------------',
-                   '\n<b>Part of income:</b>', round(cost_of_rev,2),'%')),
-             stat = 'identity',
-             fill = my_pal[1]) +
-    geom_line(aes(x = calendar_year,
-                  y = 100*cost_of_rev,
-                  color = '% of income'),
-              stat = 'identity',
-              size = 1.25) +
-    labs(x = 'Year', y = 'Service cost (k PLN)') +
-    scale_color_manual(name = '', values = my_pal_2[1])+
-    scale_y_continuous(sec.axis = sec_axis(~.*0.01, name = '% of income')))
+g03 <- ggplot(df03, aes(label = service_cost_k)) + 
+  geom_bar(aes(x = as.integer(calendar_year),
+               y = service_cost_k,
+               text = paste(
+                 '<b>YOY change:</b>', round(yoy_change,2), '%',
+                 '\n----------------------------',
+                 '\n<b>Part of income:</b>', round(cost_of_rev,2),'%')),
+           stat = 'identity',
+           fill = my_pal[1]) +
+  geom_line(aes(x = as.integer(calendar_year),
+                y = 100*cost_of_rev,
+                color = '% of income'),
+            stat = 'identity',
+            size = 1.25) +
+  labs(x = 'Year', y = 'Service cost (k PLN)') +
+  scale_color_manual(name = '', values = my_pal_2[1])+
+  scale_y_continuous(sec.axis = sec_axis(~.*0.01, name = '% of income')) +
+  
+  # "bold" labels
+  geom_text(aes(x = as.integer(calendar_year), y = service_cost_k),
+            position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.5) +
+  geom_text(aes(x = as.integer(calendar_year), y = service_cost_k),
+            position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.51) +
+  geom_text(aes(x = as.integer(calendar_year), y = service_cost_k),
+            position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.52) +
+  geom_text(aes(x = as.integer(calendar_year), y = service_cost_k),
+            position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.53)
 
 
 ggplotly(g03, tooltip = c('text'))
@@ -284,44 +308,126 @@ Service %>% group_by(calendar_year, service_type_name) %>%
   scale_fill_manual(name = 'Service type', values = my_pal)
 
 
+
+
 ########################
 # Service activities
 ########################
 # 01 - Service type
-(df04 <- Service %>% group_by(calendar_year_month, service_type_name) %>%
+df04 <- Service %>% group_by(calendar_year_month, service_type_name) %>%
   summarise(service_cost_k = round(sum(service_cost/1000),1),
             service_cnt = n()) %>%
   right_join(Calendar, by='calendar_year_month') %>%
   replace_na(list(service_cnt = 0)) %>%
   arrange(calendar_year_month) %>%
-  mutate(date = paste0(substr(month_name,1,3),"'",substr(calendar_year,3,4)),
-         calendar_year_month = as.character(calendar_year_month)) %>%
-  filter(calendar_year == 2021 | calendar_year == 2022))
+  filter(calendar_year == 2021 | calendar_year == 2022)
 
 # Vector with data labels (for labels not to overlap, some values must be empty)
-d <- c(df04$date)
-odd <- seq(2,26,2)
-d <- replace(d,odd,'')
+d <- c(distinct(df04, short_date)$short_date)
+d <- replace(d,seq(2,26,2),'')
 
-(g04 <- ggplot(df04, aes(x = calendar_year_month,
-             y = service_cnt,
-             fill = service_type_name,
-             label = service_cnt,
-             text = paste(
-               '<b>Service cost:</b>', service_cost_k,'k PLN'))) +
-  geom_col() +
+g04 <- ggplot(df04, aes(x = as.character(calendar_year_month),
+                        y = service_cnt,
+                        fill = service_type_name,
+                        label = service_cnt,
+                        text = paste(
+                          '<b>Service cost:</b>', service_cost_k,'k PLN'))) +
+  geom_bar(stat = 'identity') +
   scale_fill_manual(name = 'Service type', values = my_pal, limits = c('Oil service', 'Tire change')) +
   scale_x_discrete(labels = c(d)) +
   
-  geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3)+
-  geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.01)+
-  geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.02)+
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3) +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.01) +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.02) +
   geom_text(position = position_stack(vjust = 0.95), color = my_pal_2[2], size=3.03) +
   
-  labs(x = '', y = 'Number of serivce activities'))
+  labs(x = '', y = 'Number of serivce activities')
 
+# Remove "NA" from legend in ggplotly
 p <- ggplotly(g04, tooltip = c('text'))
-
 p %>% style(p, showlegend = FALSE, traces = 3)
 
 
+
+
+# 02 - Car model
+
+df05 <- Service %>% group_by(calendar_year_month, producer) %>%
+  summarise(service_cost_k = round(sum(service_cost/1000),1),
+            service_cnt = n()) %>%
+  right_join(Calendar, by='calendar_year_month') %>%
+  replace_na(list(service_cnt = 0)) %>%
+  arrange(calendar_year_month) %>%
+  filter(calendar_year == 2021 | calendar_year == 2022)
+
+# Vector with data labels (for labels not to overlap in ggplotly some values must be empty)
+d <- c(distinct(df05, short_date)$short_date)
+d <- replace(d,seq(2,26,2),'')
+
+(g05 <- ggplot(df05, aes(x = as.character(calendar_year_month),
+                        y = service_cnt,
+                        fill = producer,
+                        label = service_cnt,
+                        text = paste(
+                          '<b>Service cost:</b>', service_cost_k,'k PLN'))) +
+  geom_bar(stat = 'identity') +
+  scale_fill_manual(name = 'Car type', values = my_pal,
+                    limits = c(levels(Service$producer))) +
+  scale_x_discrete(labels = c(d)) +
+  
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3) +
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.01) +
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.02) +
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.03) +
+  
+  labs(x = '', y = 'Number of serivce activities') +
+    facet_wrap(~producer))
+
+# Remove "NA" from legend in ggplotly
+p <- ggplotly(g05, tooltip = c('text'))
+p %>% style(p, showlegend = FALSE, traces = 3)
+
+
+
+
+df05 <- Service %>% group_by(calendar_year_month, producer) %>%
+  summarise(service_cost_k = round(sum(service_cost/1000),1),
+            service_cnt = n()) %>%
+  right_join(Calendar, by='calendar_year_month') %>%
+  replace_na(list(service_cnt = 0)) %>%
+  arrange(calendar_year_month) %>%
+  filter(calendar_year == 2021 | calendar_year == 2022)
+
+# Vector with data labels (for labels not to overlap in ggplotly some values must be empty)
+d <- c(distinct(df05, short_date)$short_date)
+d <- replace(d,seq(2,26,2),'')
+
+(g05 <- ggplot(df05, aes(x = as.character(calendar_year_month),
+                         y = service_cnt,
+                         fill = producer,
+                         label = service_cnt,
+                         text = paste(
+                           '<b>Service cost:</b>', service_cost_k,'k PLN'))) +
+    geom_bar(stat = 'identity') +
+    scale_fill_manual(name = 'Car type', values = my_pal,
+                      limits = c(levels(Service$producer))) +
+    scale_x_discrete(labels = c(d)) +
+    
+    geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3) +
+    geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.01) +
+    geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.02) +
+    geom_text(position = position_stack(vjust = 0.5), color = my_pal_2[2], size=3.03) +
+    
+    labs(x = '', y = 'Number of serivce activities'))
+
+# Remove "NA" from legend in ggplotly
+p <- ggplotly(g05, tooltip = c('text'))
+p %>% style(p, showlegend = FALSE, traces = 9)
+
+
+as.tibble(Service)
+df07 <- Service %>% group_by(calendar_year, car_id, producer, model) %>%
+  summarise(service_cost_car = round(sum(service_cost),2)) %>%
+  group_by(calendar_year, producer, model) %>%
+  summarise(average_cost_per_car = round(mean(service_cost_car),2)) %>%
+  filter(calendar_year == 2022)

@@ -13,7 +13,7 @@ execute:
   echo: false
 ---
 
-```{r, echo = FALSE}
+```{r}
 ##############
 # SET UP
 #############
@@ -125,10 +125,10 @@ Income[2:3] <- as.data.frame(
 
 
 # Custom palette
-my_pal = c("#798E87",'#9BB0A5','#798BA0','#9FACBD','#635e68','#a9a5b0', "#78726d","#9e9995",'#c7c7c1')
+my_pal = c("#798E87",'#9BB0A5','#798BA0','#9FACBD','#635c6b','#a9a5b0', "#78706a","#9e9995",'#c7c7c1')
 
 # Long
-my_pal_l = c("#798E87",'#9BB0A5','#b39f57',"#CCC591",'#a3a899','#798BA0','#9FACBD','#635e68','#a9a5b0', "#78726d","#9e9995",'#c7c7c1')
+my_pal_l = c("#798E87",'#9BB0A5','#b39f57',"#CCC591",'#a3a899','#798BA0','#9FACBD','#635c6b','#a9a5b0', "#78706a","#9e9995",'#c7c7c1')
 
 # Highlights
 my_pal_h = c('#cf9d47','#f7f6f6','#454141')
@@ -136,7 +136,7 @@ my_pal_h = c('#cf9d47','#f7f6f6','#454141')
 
 ### Service costs
 
-#### 2022 vs 2021
+#### 2022 vs. 2021
 
 ```{r}
 df01_b <- Service %>% group_by(service_type_name, calendar_year) %>%
@@ -151,7 +151,7 @@ sc_2022 <- df01_b[2,3]+df01_b[4,3]
 diff <- round(((sc_2022-sc_2021)/sc_2022)*100,2)
 ```
 
-Total service costs in 2022: **`r sc_2022` k PLN *(+ `r sc_2022 - sc_2021` k PLN \|\| + `r diff`% vs 2021)***\
+Total service costs in 2022: **`r sc_2022` k PLN *(+ `r sc_2022 - sc_2021` k PLN | + `r diff`% vs 2021)***\
 Total service costs in 2021: **`r sc_2021` k PLN**
 
 ```{r}
@@ -174,9 +174,9 @@ g01_b <- ggplot(df01_b, aes(x = calendar_year,
 ggplotly(g01_b, tooltip = c('text'))
 ```
 
-#### General trend vs income
+#### General trend vs. income
 
-Change of service costs YOY:
+Change of service costs 2016-2022:
 
 ```{r}
 yearly_income <- Income %>% group_by(payment_year) %>%
@@ -223,8 +223,7 @@ ggplotly(g03, tooltip = c('text'))
 
 ### Service activities
 
-::: {.panel-tabset}
-
+::: panel-tabset
 #### Events per service type
 
 ```{r}
@@ -273,7 +272,7 @@ p %>% style(p, showlegend = FALSE, traces = 3)
 
 #### Events per producer
 
-Number of service activities in years 2021-2022 - split by **producer**.
+Number of service activities in years 2021-2022 (split by **producer**).
 
 ```{r}
 df05 <- Service %>% group_by(calendar_year_month, producer) %>%
@@ -314,16 +313,13 @@ p <- ggplotly(g05, tooltip = c('text'))
 p %>% style(p, showlegend = FALSE, traces = 9)
 
 ```
-
 :::
 
 ### Car maintenance costs
 
 #### Service costs in 2022
 
-*A: tutaj w tooltipie dodałabym średni koszt serwisu danego samochodu -
-tzn brakuje mi informacji czemu za dany model placimy ile placimy,
-czy zalezy to od liczby samochodu czy koszty serwisu danego modelu są droższe?*
+*A: tutaj w tooltipie dodałabym średni koszt serwisu danego samochodu - tzn brakuje mi informacji czemu za dany model placimy ile placimy, czy zalezy to od liczby samochodu czy koszty serwisu danego modelu są droższe?*
 
 ```{r}
 # Total costs per model and producer
@@ -358,8 +354,7 @@ ggplotly(g06, tooltip = c('text'))
 
 Mean service costs per car
 
-*A: czy to są koszty per car_id czy per model?
-Moze w tooltipie dodać informację, która nie wynika z wykresu? Np wiek samochodu i srednia liczba dzialan serwisowych w roku?*
+*A: czy to są koszty per car_id czy per model? Moze w tooltipie dodać informację, która nie wynika z wykresu? Np wiek samochodu i srednia liczba dzialan serwisowych w roku?*
 
 ```{r}
 # Mean yearly service costs per car
@@ -394,7 +389,6 @@ df07 <- Service %>% group_by(calendar_year, car_id, producer, model) %>%
 ```
 
 *A: mysle, ze jak mamy ten wykres powyżej, to ten poniżej nie jest już potrzebny*
-
 
 ```{r}
     #Mean lifetime service costs per car

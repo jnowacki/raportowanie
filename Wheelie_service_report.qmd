@@ -24,7 +24,7 @@ library(DBI)
 library(odbc)
 library(tidyverse)
 library(plotly)
-library(DT)
+library(kableExtra)
 
 # Connection with DW
 # Rename template.config.properties to config.properties and fill out login data
@@ -151,7 +151,7 @@ sc_2022 <- df01_b[2,3]+df01_b[4,3]
 diff <- round(((sc_2022-sc_2021)/sc_2022)*100,2)
 ```
 
-Total service costs in 2022: **`r sc_2022` k PLN *(+ `r sc_2022 - sc_2021` k PLN | + `r diff`% vs 2021)***\
+Total service costs in 2022: **`r sc_2022` k PLN *(+ `r sc_2022 - sc_2021` k PLN \| + `r diff`% vs 2021)***\
 Total service costs in 2021: **`r sc_2021` k PLN**
 
 ```{r}
@@ -317,24 +317,29 @@ p %>% style(p, showlegend = FALSE, traces = 9)
 
 ### Car maintenance costs
 
-#### Service costs in 2022
+::: panel-tabset
 
-*A: tutaj w tooltipie dodałabym średni koszt serwisu danego samochodu - tzn brakuje mi informacji czemu za dany model placimy ile placimy, czy zalezy to od liczby samochodu czy koszty serwisu danego modelu są droższe?*
+#### Costs per model
+
+Total service costs in 2022 per model and producer:
 
 ```{r}
-# Total costs per model and producer
-
 df06 <- Service %>% group_by(producer, model, calendar_year) %>%
-  summarise(service_cost_model_k = round(sum(service_cost/1000),1)) %>%
+  summarise(service_cost_model_k = round(sum(service_cost/1000),1),
+            mean_service_cost_model = round(mean(service_cost,1))) %>%
   group_by(producer, calendar_year) %>%
-  mutate(service_cost_producer_k = sum(service_cost_model_k))
-
+  mutate(service_cost_producer_k = sum(service_cost_model_k),
+         mean_service_cost_producer = round(mean(mean_service_cost_model),1))
 
 g06 <- ggplot((df06 %>% filter(calendar_year==2022)),
-               aes(x = reorder(producer, service_cost_producer_k),
-                   y = service_cost_model_k,
-                   fill = reorder(model, service_cost_producer_k),
-                   label = paste(service_cost_model_k, model, sep="\n"))) +
+              aes(x = reorder(producer, service_cost_producer_k),
+                  y = service_cost_model_k,
+                  fill = reorder(model, service_cost_producer_k),
+                  label = paste(service_cost_model_k, model, sep="\n"),
+                  text = paste(
+                    '<b>Mean service cost for:</b>',
+                    '\n<b> Model:</b>', mean_service_cost_model,'PLN',
+                    '\n<b> Producer:</b>',mean_service_cost_producer,'PLN'))) +
   geom_bar(stat = "identity") +
   scale_fill_manual(name = 'Car model', values = c(my_pal_l)) +
   
@@ -347,70 +352,66 @@ g06 <- ggplot((df06 %>% filter(calendar_year==2022)),
   theme(legend.position = "none")
 
 ggplotly(g06, tooltip = c('text'))
+
+```
+```{r}
+df06_a <- df06 %>% filter(calendar_year == 2022) %>%
+    select(!c(calendar_year,model,mean_service_cost_model,service_cost_model_k)) %>%
+    distinct(producer, .keep_all = TRUE) %>%
+    arrange(desc(mean_service_cost_producer))
+
+DT::datatable(df06_a,
+              rownames = FALSE,
+              options = list(dom = 't'),
+              colnames = c('Year','Producer','Total service cost [k PLN]','Mean service cost [PLN]'))
     
 ```
+#### Costs per car ID
 
-#### Service costs per car
-
-Mean service costs per car
-
-*A: czy to są koszty per car_id czy per model? Moze w tooltipie dodać informację, która nie wynika z wykresu? Np wiek samochodu i srednia liczba dzialan serwisowych w roku?*
+Top 5 cars in terms of service costs in 2022:
 
 ```{r}
-# Mean yearly service costs per car
-
-df07 <- Service %>% group_by(calendar_year, car_id, producer, model) %>%
-      summarise(service_cost_car = sum(service_cost)) %>%
-      group_by(calendar_year, producer, model) %>%
-      summarise(average_cost_per_car = mean(service_cost_car)) %>%
-      group_by(producer, model) %>%
-      summarise(average_cost_per_car_per_year = round(mean(average_cost_per_car),2))
+df07 <- Service %>% group_by(calendar_year,production_year, fuel_type, car_id, producer, model) %>%
+  summarise(mean_service_cost_car = mean(service_cost),
+            total_service_cost_car = sum(service_cost)) %>% 
+  mutate(age = calendar_year-production_year,
+         producer_model = paste(producer,model,sep=' ')) %>%
+  arrange(desc(total_service_cost_car))
     
-     g07 <- ggplot(df07, aes(x = reorder(model, average_cost_per_car_per_year),
-                             y = average_cost_per_car_per_year,
-                             fill = reorder(producer, average_cost_per_car_per_year),
-                             label = average_cost_per_car_per_year,
-                             text = paste(
-                               '<b>Producer:</b>', producer,
-                               '\n', '<b>Model:</b>', model,
-                               '\n', '<b>Mean yearly service cost:</b>', average_cost_per_car_per_year, ' PLN'))) +
-        geom_bar(stat = "identity") +
-        scale_fill_manual(name = 'Producer', values = my_pal_l,
-                          limits = c(levels(Service$producer))) +
-        labs(x = '', y = 'Mean yearly cost of service (PLN)') + 
-       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-    geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.0) +
-    geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.01) +
-    geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.02) +
-    geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.03)
-    
-
-    ggplotly(g07, tooltip = c('text'))
+g07 <- ggplot(df07 %>% filter(calendar_year== 2022) %>% head(),
+       aes(x = reorder(as.character(car_id),total_service_cost_car),
+           y = total_service_cost_car,
+           fill = producer_model,
+           label = total_service_cost_car,
+           text = paste(
+             '<b>Car ID:</b>', car_id,
+             '\n<b>Car age:</b>',age,'years',
+             '\n<b>Fuel type:</b>',fuel_type)))+
+  geom_bar(stat = 'identity') + 
+  scale_fill_manual(name = 'Car model', values = c(my_pal_l)) +
+  labs(y = 'Total service cost in 2022', x = '') +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.0) +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.01) +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.02) +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.03) +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x=element_blank())
+  
+ggplotly(g07, tooltip = c('text'))
 ```
 
-*A: mysle, ze jak mamy ten wykres powyżej, to ten poniżej nie jest już potrzebny*
 
 ```{r}
-    #Mean lifetime service costs per car
+df07_a <- df07 %>% filter(calendar_year== 2022) %>% 
+  select(calendar_year,producer,model,car_id,production_year,fuel_type,mean_service_cost_car,total_service_cost_car) %>% head()
 
-   
+DT::datatable(df07_a,
+              rownames = FALSE,
+              options = list(dom = 't'),
+              colnames = c('Year','Producer','Model','Car ID',
+                           'Production year','Fuel type','Mean service cost [PLN]',
+                           'Total service cost [PLN]'))
     
-    df07 <- Service %>% group_by(car_id, producer, model) %>%
-      summarise(service_cost_car = round(sum(service_cost),2)) %>%
-      group_by(producer, model) %>%
-      summarise(average_cost_per_car = round(mean(service_cost_car),2))
-
-    g07 <- ggplot(df07, aes(x = reorder(model, average_cost_per_car),
-                             y = average_cost_per_car,
-                             fill = reorder(producer, average_cost_per_car),
-                             text = paste(
-                               '<b>Producer:</b>', producer, '\n', '<b>Model:</b>', model, '\n',
-                               '<b>Mean service cost:</b>', average_cost_per_car, ' PLN'))) +
-        geom_bar(stat = "identity") +
-        scale_fill_manual(name = 'Producer', values = my_pal_l,
-                          limits = c(levels(Service$producer))) +
-        labs(x = '', y = 'Mean lifetime cost of service (PLN)') + 
-       theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-    ggplotly(g07, tooltip = c('text'))
 ```
+
+:::

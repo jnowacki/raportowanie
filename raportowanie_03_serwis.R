@@ -3,6 +3,7 @@
 ########################
 
 # install.packages("properties")
+# install.packages("kableExtra")
 library(properties)
 library(DBI)
 library(odbc)
@@ -439,46 +440,108 @@ p %>% style(p, showlegend = FALSE, traces = 9)
 
 as.tibble(Service)
 
-(df06 <- Service %>% group_by(calendar_year, producer, model) %>%
-    summarise(service_cost_model_k = round(sum(service_cost/1000),1),
-              cnt_model = n()) %>%
-    group_by(producer, calendar_year) %>%
-    mutate(service_cost_producer_k = sum(service_cost_model_k),
-           cnt_producer = sum(cnt_model)))
+df06 <- Service %>% group_by(producer, model, calendar_year) %>%
+  summarise(service_cost_model_k = round(sum(service_cost/1000),1),
+            mean_service_cost_model = round(mean(service_cost,1))) %>%
+  group_by(producer, calendar_year) %>%
+  mutate(service_cost_producer_k = sum(service_cost_model_k),
+         mean_service_cost_producer = round(mean(mean_service_cost_model),1))
 
+(df06_a <- df06 %>% filter(calendar_year == 2022) %>%
+    select(!c(calendar_year,model,mean_service_cost_model,service_cost_model_k)) %>%
+    distinct(producer, .keep_all = TRUE) %>%
+    arrange(desc(mean_service_cost_producer)))
 
+df06%>%View()
 
-(g06 <- ggplot((df06 %>% filter(calendar_year==2022)),
-               aes(x = reorder(producer, service_cost_producer_k),
-                   y = service_cost_model_k,
-                   fill = reorder(model, service_cost_producer_k),
-                   label = paste(service_cost_model_k, model, sep="\n"),
-                   text = paste('<b>Number of service act: </b>',cnt_model))) +
+g06 <- ggplot((df06 %>% filter(calendar_year==2022)),
+              aes(x = reorder(producer, service_cost_producer_k),
+                  y = service_cost_model_k,
+                  fill = reorder(model, service_cost_producer_k),
+                  label = paste(service_cost_model_k, model, sep="\n"),
+                  text = paste(
+                    '<b>Mean service cost for:</b>',
+                    '\n<b> Model:</b>', mean_service_cost_model,'PLN',
+                    '\n<b> Producer:</b>',mean_service_cost_producer,'PLN'))) +
   geom_bar(stat = "identity") +
-  scale_fill_manual(name = 'Car model', values = c(my_pal)) +
+  scale_fill_manual(name = 'Car model', values = c(my_pal_l)) +
   
-  geom_text(position = position_stack(vjust = 0.8), color = my_pal_2[2], size=3.5) +
-  geom_text(position = position_stack(vjust = 0.8), color = my_pal_2[2], size=3.51) +
-  geom_text(position = position_stack(vjust = 0.8), color = my_pal_2[2], size=3.52) +
-  geom_text(position = position_stack(vjust = 0.8), color = my_pal_2[2], size=3.53) +
+  geom_text(position = position_stack(vjust = 0.8), color = my_pal_h[2], size=3.5) +
+  geom_text(position = position_stack(vjust = 0.8), color = my_pal_h[2], size=3.51) +
+  geom_text(position = position_stack(vjust = 0.8), color = my_pal_h[2], size=3.52) +
+  geom_text(position = position_stack(vjust = 0.8), color = my_pal_h[2], size=3.53) +
   
-  labs(x = '', y = 'Service costs (k PLN)') +
-  theme(legend.position = "none"))
+  
+  theme(legend.position = "none")
 
 ggplotly(g06, tooltip = c('text'))
 
 
+(df07 <- Service %>% group_by(calendar_year,production_year, fuel_type, car_id, producer, model) %>%
+  summarise(mean_service_cost_car = mean(service_cost),
+            total_service_cost_car = sum(service_cost)) %>% 
+  mutate(age = calendar_year-production_year,
+         producer_model = paste(producer,model,sep=' ')) %>%
+  arrange(desc(total_service_cost_car)))
+
+df07 %>% filter(calendar_year== 2022) %>% 
+  select(calendar_year,producer,model,car_id,production_year,fuel_type,mean_service_cost_car,total_service_cost_car) %>% head()
+
+
+(g07 <- ggplot(df07 %>% filter(calendar_year== 2022) %>% head(),
+       aes(x = reorder(as.character(car_id),total_service_cost_car),
+           y = total_service_cost_car,
+           fill = producer_model,
+           label = total_service_cost_car,
+           text = paste(
+             '<b>Car ID:</b>', car_id,
+             '\n<b>Car age:</b>',age,'years',
+             '\n<b>Fuel type:</b>',fuel_type)))+
+  geom_bar(stat = 'identity') + 
+  scale_fill_manual(name = 'Car model', values = c(my_pal_l)) +
+  labs(y = 'Total service cost in 2022', x = '') +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.0) +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.01) +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.02) +
+  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.03) +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x=element_blank())) 
+  
+
+
+ggplotly(g07, tooltip = c('text'))
 
 
 
+Service %>% View()
 
+df08 <- Service %>% group_by(producer, fuel_type, calendar_year) %>%
+  summarise(service_cost_fuel_type_k = round(sum(service_cost/1000),1),
+            mean_service_cost_fuel_type = round(mean(service_cost,1))) %>%
+  group_by(producer, calendar_year) %>%
+  mutate(service_cost_producer_k = sum(service_cost_fuel_type_k),
+         mean_service_cost_producer = round(mean(mean_service_cost_fuel_type),1))
 
+g08 <- ggplot((df08 %>% filter(calendar_year==2022)),
+              aes(x = reorder(producer, service_cost_producer_k),
+                  y = service_cost_fuel_type_k,
+                  fill = reorder(fuel_type, service_cost_producer_k),
+                  label = paste(service_cost_fuel_type_k, fuel_type, sep="\n"),
+                  text = paste(
+                    '<b>Mean service cost for:</b>',
+                    '\n<b> Model:</b>', mean_service_cost_fuel_type,'PLN',
+                    '\n<b> Producer:</b>',mean_service_cost_producer,'PLN'))) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(name = 'Car model', values = c(my_pal_l)) +
+  
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_h[2], size=3.5) +
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_h[2], size=3.51) +
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_h[2], size=3.52) +
+  geom_text(position = position_stack(vjust = 0.5), color = my_pal_h[2], size=3.53) +
+  
+  labs(x = '', y = 'Service costs (k PLN)') +
+  theme(legend.position = "none")
 
-
-
-
-
-
-
+ggplotly(g08, tooltip = c('text'))
 
 

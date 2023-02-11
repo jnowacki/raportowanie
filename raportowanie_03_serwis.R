@@ -213,6 +213,18 @@ g01_b <- ggplot(df01_b, aes(x = calendar_year,
 ggplotly(g01_b, tooltip = c('text'))
 
 
+df01_b <- Service %>% group_by(service_type_name, calendar_year) %>%
+  filter(calendar_year == 2022 | calendar_year == 2021) %>%
+  summarise(service_cost_k = round(sum(service_cost)/1000,1)) %>%
+  mutate(yoy_change = ((service_cost_k - lag(service_cost_k))/service_cost_k)*100) %>%
+  replace_na(list(yoy_change = 0)) %>%
+  mutate(across(c('calendar_year'),factor))
+
+sc_2021 <- df01_b[1,3]+df01_b[3,3]
+sc_2022 <- df01_b[2,3]+df01_b[4,3]
+diff <- round(((sc_2022-sc_2021)/sc_2022)*100,2)
+
+
 # 02 - general trend
 ## 1st option - total service
 df02_a <- Service %>% group_by(calendar_year) %>%
@@ -478,34 +490,32 @@ ggplotly(g06, tooltip = c('text'))
 
 
 (df07 <- Service %>% group_by(calendar_year,production_year, fuel_type, car_id, producer, model) %>%
-  summarise(mean_service_cost_car = mean(service_cost),
-            total_service_cost_car = sum(service_cost)) %>% 
-  mutate(age = calendar_year-production_year,
-         producer_model = paste(producer,model,sep=' ')) %>%
-  arrange(desc(total_service_cost_car)))
-
-df07 %>% filter(calendar_year== 2022) %>% 
-  select(calendar_year,producer,model,car_id,production_year,fuel_type,mean_service_cost_car,total_service_cost_car) %>% head()
-
+    summarise(mean_service_cost_car = mean(service_cost),
+              total_service_cost_car = sum(service_cost),
+              cnt = n()) %>% 
+    mutate(age = calendar_year-production_year,
+           producer_model = paste(producer,model,sep=' ')) %>%
+    arrange(desc(total_service_cost_car)))
 
 (g07 <- ggplot(df07 %>% filter(calendar_year== 2022) %>% head(),
-       aes(x = reorder(as.character(car_id),total_service_cost_car),
-           y = total_service_cost_car,
-           fill = producer_model,
-           label = total_service_cost_car,
-           text = paste(
-             '<b>Car ID:</b>', car_id,
-             '\n<b>Car age:</b>',age,'years',
-             '\n<b>Fuel type:</b>',fuel_type)))+
-  geom_bar(stat = 'identity') + 
-  scale_fill_manual(name = 'Car model', values = c(my_pal_l)) +
-  labs(y = 'Total service cost in 2022', x = '') +
-  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.0) +
-  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.01) +
-  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.02) +
-  geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.03) +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x=element_blank())) 
+               aes(x = reorder(as.character(car_id),total_service_cost_car),
+                   y = total_service_cost_car,
+                   fill = producer_model,
+                   label = total_service_cost_car,
+                   text = paste(
+                     '<b>Car ID:</b>', car_id,
+                     '\n<b>Service events:</b>',cnt,
+                     '\n<b>Car age:</b>',age,'years',
+                     '\n<b>Fuel type:</b>',fuel_type)))+
+    geom_bar(stat = 'identity') + 
+    scale_fill_manual(name = 'Car model', values = c(my_pal_l)) +
+    labs(y = 'Total service cost in 2022', x = '') +
+    geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.0) +
+    geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.01) +
+    geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.02) +
+    geom_text(position = position_stack(vjust = 0.95), color = my_pal_h[2], size=3.03) +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x=element_blank())) 
   
 
 
@@ -513,7 +523,15 @@ ggplotly(g07, tooltip = c('text'))
 
 
 
-Service %>% View()
+
+
+
+ggplotly(g07, tooltip = c('text'))
+
+
+
+
+Service %>% filter(car_id==670) %>% View()
 
 df08 <- Service %>% group_by(producer, fuel_type, calendar_year) %>%
   summarise(service_cost_fuel_type_k = round(sum(service_cost/1000),1),
